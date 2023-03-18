@@ -9,6 +9,7 @@
 #include <assert.h>
 #include <errno.h>
 
+
 void print_as_bytes(unsigned char *buff, ssize_t length) {
   for (ssize_t i = 0; i < length; i++, buff++)
     printf("%.2x ", *buff);
@@ -51,7 +52,7 @@ void send_packages(struct timespec *start, int sockfd, struct sockaddr_in addr, 
 }
 
 // check if package is response to one we send from current round
-int check_package(uint8_t *buffer, int pid, int ttl) {
+int check_package(uint8_t *buffer, int ttl) {
   struct ip *ip_header = (struct ip *)buffer;
   ssize_t offset = 4 * ip_header->ip_hl;
 
@@ -73,18 +74,18 @@ int check_package(uint8_t *buffer, int pid, int ttl) {
   uint16_t id = icmp_header->icmp_id;
   uint16_t seq = icmp_header->icmp_seq;
 	
-  return (id == pid && seq == ttl) ? 1 : 0;
+  return (id == getpid() && seq == ttl) ? 1 : 0;
 }
 
 //print response for given round
-void printf_received_from(char senders_string_addr[3][20], int times[3], int count, int ttl) {
+void printf_received_from(char senders_string_addr[3][20], int64_t times[3], int count, int ttl) {
   printf("%d.\t", ttl);
   // check if senders are equal
   if (count == 0)
     printf("*\n");
 
   else if (count == 3 && !strcmp(senders_string_addr[0], senders_string_addr[1]) && !strcmp(senders_string_addr[1], senders_string_addr[2]))
-    printf("%s\t\t%d ms\n", senders_string_addr[0], (times[0] + times[1] + times[2]) / 3);
+    printf("%s\t\t%ld ms\n", senders_string_addr[0], (times[0] + times[1] + times[2]) / 3);
 
   else if (count == 2 && !strcmp(senders_string_addr[0], senders_string_addr[1]))
     printf("%s\t\t??? ms\n", senders_string_addr[0]);
@@ -95,16 +96,14 @@ void printf_received_from(char senders_string_addr[3][20], int times[3], int cou
 }
 
 int64_t measure_time(struct timespec *start, struct timespec *end) {
-  int64_t time_start = (int)(start->tv_nsec / 1000000);
-  int64_t time_end = (int)(end->tv_nsec / 1000000);
-  return (time_end - time_start);
+  return (int64_t)((end->tv_nsec - start->tv_nsec)  / 1000000);
 }
 
 //nonblocking receive packages
-int receive_packages(struct timespec *start, int sock_descr, char *address, int ttl) {
+int receive_packages(struct timespec *start, int sock_descr, char *address, int64_t ttl) {
   struct timespec end;
   char senders_ip_str[3][20];
-  int times[3];
+  int64_t times[3];
   struct sockaddr_in sender;
   socklen_t sender_len = sizeof(sender);
   u_int8_t buffer[IP_MAXPACKET];
@@ -119,7 +118,7 @@ int receive_packages(struct timespec *start, int sock_descr, char *address, int 
 
   int count = 0;
   ssize_t packet_len;
-  while (ready = select(sock_descr + 1, &descriptors, NULL, NULL, &tv) & count < 3) {
+  while (ready = select(sock_descr + 1, &descriptors, NULL, NULL, &tv)) {
     packet_len = recvfrom(sock_descr, buffer, IP_MAXPACKET, MSG_DONTWAIT, (struct sockaddr *)&sender, &sender_len);
 
 	// save time of receiving
@@ -131,7 +130,7 @@ int receive_packages(struct timespec *start, int sock_descr, char *address, int 
     }
 
 	// check if package has ours ttl and pid if so store info about it
-    if (check_package(buffer, getpid(), ttl)) {
+    if (check_package(buffer, ttl)) {
       inet_ntop(AF_INET, &(sender.sin_addr), senders_ip_str[count], sizeof(senders_ip_str[count]));
       times[count] = measure_time(start, &end);
       count++;
