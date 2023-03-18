@@ -50,7 +50,7 @@ void send_packages(struct timespec *start, int sockfd, struct sockaddr_in addr, 
     }
 }
 
-// check if package is response to one we send from currend round
+// check if package is response to one we send from current round
 int check_package(uint8_t *buffer, int pid, int ttl) {
   struct ip *ip_header = (struct ip *)buffer;
   ssize_t offset = 4 * ip_header->ip_hl;
@@ -62,7 +62,7 @@ int check_package(uint8_t *buffer, int pid, int ttl) {
   if (icmp_header->icmp_type == ICMP_TIME_EXCEEDED) {
   
     offset += 8;
-	ip_header = (struct ip *)(buffer+offset);
+    ip_header = (struct ip *)(buffer+offset);
     offset += 4 * ip_header->ip_hl;
   
   }
@@ -76,7 +76,7 @@ int check_package(uint8_t *buffer, int pid, int ttl) {
   return (id == pid && seq == ttl) ? 1 : 0;
 }
 
-//print response from given round
+//print response for given round
 void printf_received_from(char senders_string_addr[3][20], int times[3], int count, int ttl) {
   printf("%d.\t", ttl);
   // check if senders are equal
@@ -164,7 +164,7 @@ int main(int argc, char *argv[]) {
   }
 
   if (geteuid() != 0) {
-    fprintf(stderr, "Program needs superusser permission to work properly.\n");
+    fprintf(stderr, "Program needs superuser permission to work properly.\n");
     return EXIT_FAILURE;
   }
 
@@ -179,7 +179,7 @@ int main(int argc, char *argv[]) {
 
   struct timespec time_start;
 
-  //maing loop
+  //main loop
   for (int ttl = 1; ttl <= 30; ttl++) {
     setsockopt(sockfd, IPPROTO_IP, IP_TTL, &ttl, sizeof(int));
 

@@ -1,5 +1,4 @@
 CC = gcc -g
-CFLAGS = -O3 
 
 OBJS = traceroute.o
 
