@@ -30,14 +30,14 @@ struct icmp icmp_header(int ttl) {
   struct icmp header;
   header.icmp_type = ICMP_ECHO;
   header.icmp_code = 0;
-  header.icmp_hun.ih_idseq.icd_id = getpid();
-  header.icmp_hun.ih_idseq.icd_seq = ttl;
+  header.icmp_hun.ih_idseq.icd_id = (uint16_t)getpid();
+  header.icmp_hun.ih_idseq.icd_seq = htons(ttl);
   header.icmp_cksum = 0;
   header.icmp_cksum = compute_icmp_checksum((u_int16_t *)&header, sizeof(header));
 
   return header;
 }
-//send 3 packages with given tll
+//send 3 packages with given ttl
 void send_packages(struct timespec *start, int sockfd, struct sockaddr_in addr, int ttl) {
   struct icmp header = icmp_header(ttl);
   setsockopt(sockfd, IPPROTO_IP, IP_TTL, &ttl, sizeof(int));
@@ -72,38 +72,42 @@ int check_package(uint8_t *buffer, int ttl) {
   icmp_header = (struct icmp *)(icmp_packet);
 
   uint16_t id = icmp_header->icmp_id;
-  uint16_t seq = icmp_header->icmp_seq;
+  uint16_t seq = ntohs(icmp_header->icmp_seq);
 	
-  return (id == getpid() && seq == ttl) ? 1 : 0;
+  return (id == (uint16_t)getpid() && seq == ttl) ? 1 : 0;
 }
 
 //print response for given round
-void printf_received_from(char senders_string_addr[3][20], int64_t times[3], int count, int ttl) {
-  printf("%d.\t", ttl);
+void printf_received_from(char senders_string_addr[3][20], uint64_t times[3], int count, int ttl) {
   // check if senders are equal
-  if (count == 0)
+  if (count == 0){
+    printf("%d.\t", ttl);
     printf("*\n");
-
-  else if (count == 3 && !strcmp(senders_string_addr[0], senders_string_addr[1]) && !strcmp(senders_string_addr[1], senders_string_addr[2]))
+  }
+  else if (count == 3 && !strcmp(senders_string_addr[0], senders_string_addr[1]) && !strcmp(senders_string_addr[1], senders_string_addr[2])){
+    printf("%d.\t", ttl);
     printf("%s\t\t%ld ms\n", senders_string_addr[0], (times[0] + times[1] + times[2]) / 3);
-
-  else if (count == 2 && !strcmp(senders_string_addr[0], senders_string_addr[1]))
+}
+  else if (count == 2 && !strcmp(senders_string_addr[0], senders_string_addr[1])){
+    printf("%d.\t", ttl);
     printf("%s\t\t??? ms\n", senders_string_addr[0]);
-
+  }
   else
-    for (int i = 0; i < count; i++)
+    for (int i = 0; i < count; i++){
+      printf("%d.\t", ttl);
       printf("%s\t\t???\n", senders_string_addr[i]);
+    }
 }
 
-int64_t measure_time(struct timespec *start, struct timespec *end) {
-  return (int64_t)((end->tv_nsec - start->tv_nsec)  / 1000000);
+uint64_t measure_time(struct timespec *start, struct timespec *end) {
+  return (uint64_t)(end->tv_sec * 1000 + end->tv_nsec / 1000000) - (uint64_t)(start->tv_sec * 1000 + start->tv_nsec / 1000000);
 }
 
 //nonblocking receive packages
 int receive_packages(struct timespec *start, int sock_descr, char *address, int64_t ttl) {
   struct timespec end;
   char senders_ip_str[3][20];
-  int64_t times[3];
+  uint64_t times[3];
   struct sockaddr_in sender;
   socklen_t sender_len = sizeof(sender);
   u_int8_t buffer[IP_MAXPACKET];
@@ -118,18 +122,24 @@ int receive_packages(struct timespec *start, int sock_descr, char *address, int6
 
   int count = 0;
   ssize_t packet_len;
-  while (ready = select(sock_descr + 1, &descriptors, NULL, NULL, &tv)) {
+  while(count < 3){
+
+    ready = select(sock_descr + 1, &descriptors, NULL, NULL, &tv); 
+    if(ready < 0)
+    	exit(0);
+    if(ready ==0)
+	    break;
     packet_len = recvfrom(sock_descr, buffer, IP_MAXPACKET, MSG_DONTWAIT, (struct sockaddr *)&sender, &sender_len);
 
-	// save time of receiving
-	timespec_get(&end, TIME_UTC);
+    // save time of receiving
+    timespec_get(&end, TIME_UTC);
 
     if (packet_len < 0) {
       fprintf(stderr, "recvfrom error: %s\n", strerror(errno));
       return EXIT_FAILURE;
     }
 
-	// check if package has ours ttl and pid if so store info about it
+    // check if package has ours ttl and pid if so store info about it
     if (check_package(buffer, ttl)) {
       inet_ntop(AF_INET, &(sender.sin_addr), senders_ip_str[count], sizeof(senders_ip_str[count]));
       times[count] = measure_time(start, &end);
@@ -163,7 +173,7 @@ int main(int argc, char *argv[]) {
   }
 
   if (geteuid() != 0) {
-    fprintf(stderr, "Program needs superuser permission to work properly.\n");
+    fprintf(stderr, "Program needs superuser privileges to work properly.\n");
     return EXIT_FAILURE;
   }
 
@@ -184,7 +194,7 @@ int main(int argc, char *argv[]) {
 
     send_packages(&time_start, sockfd, addr, ttl);
     
-	//if we received response from address we wanted to trace we can break from the loop and return
+    //if we received response from address we wanted to trace we can break from the loop and return
     if (receive_packages(&time_start, sockfd, address, ttl) == 1)
       break;
   }
