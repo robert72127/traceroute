@@ -1,5 +1,7 @@
 CC = gcc -g
 
+CFLAGS = -O1 -Wall
+
 OBJS = traceroute.o
 
 all: traceroute
